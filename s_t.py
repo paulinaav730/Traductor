@@ -76,6 +76,7 @@ st.markdown("""
     div.stButton > button:hover {
         background: #D95D23;
         color: white;
+        border: none;
     }
 
     [data-testid="stSidebar"] {
@@ -108,6 +109,19 @@ IDIOMAS = {
 }
 
 # ==================================================
+# ESTADO DE LA APLICACIÓN
+# ==================================================
+
+if "texto_reconocido" not in st.session_state:
+    st.session_state["texto_reconocido"] = ""
+
+if "texto_entrada" not in st.session_state:
+    st.session_state["texto_entrada"] = ""
+
+if "mensaje_reconocimiento" not in st.session_state:
+    st.session_state["mensaje_reconocimiento"] = ""
+
+# ==================================================
 # BARRA LATERAL
 # ==================================================
 
@@ -133,6 +147,7 @@ st.markdown("""
     <h1>🌎 VozTexto</h1>
     <p>Habla. Traduce. Conecta.</p>
 </div>
+
 <div class="description">
     Rompe las barreras del idioma usando tu voz.
 </div>
@@ -151,7 +166,7 @@ with col_img2:
 st.markdown("---")
 
 # ==================================================
-# SELECCIÓN DE IDIOMA Y GRABACIÓN
+# GRABACIÓN Y RECONOCIMIENTO DE VOZ
 # ==================================================
 
 st.subheader("🎤 1. Graba tu voz")
@@ -168,16 +183,11 @@ st.info(
     "lo solicita, habla y detén la grabación."
 )
 
-# Grabador nativo de Streamlit: no necesita Bokeh.
 grabacion = st.audio_input(
     "Graba tu mensaje",
     sample_rate=16000,
     key="grabacion_voz"
 )
-
-# ==================================================
-# RECONOCIMIENTO DE VOZ
-# ==================================================
 
 if grabacion is not None:
     st.audio(grabacion)
@@ -186,7 +196,7 @@ if grabacion is not None:
         try:
             reconocedor = sr.Recognizer()
 
-            with st.spinner("Escuchando y convirtiendo tu voz en texto..."):
+            with st.spinner("Convirtiendo tu voz en texto..."):
                 datos_audio = sr.AudioFile(
                     io.BytesIO(grabacion.getvalue())
                 )
@@ -199,36 +209,45 @@ if grabacion is not None:
                     language=IDIOMAS[idioma_origen]["voz"]
                 )
 
-                st.session_state["texto_reconocido"] = texto_reconocido
+            # Actualizar el estado ANTES de crear el cuadro de texto.
+            st.session_state["texto_reconocido"] = texto_reconocido
+            st.session_state["texto_entrada"] = texto_reconocido
+            st.session_state["mensaje_reconocimiento"] = "ok"
 
-            st.success("¡Tu voz se convirtió en texto!")
+            # Actualizar la interfaz con el texto reconocido.
+            st.rerun()
 
         except sr.UnknownValueError:
-            st.warning(
-                "No logramos entender lo que dijiste. "
-                "Intenta grabar de nuevo, hablando más cerca del micrófono."
-            )
+            st.session_state["mensaje_reconocimiento"] = "no_entendido"
 
-        except sr.RequestError as error:
-            st.error(
-                "No se pudo conectar con el servicio de reconocimiento "
-                "de voz. Comprueba tu conexión a internet."
-            )
-            st.caption(f"Detalle técnico: {error}")
+        except sr.RequestError:
+            st.session_state["mensaje_reconocimiento"] = "sin_conexion"
 
         except Exception as error:
-            st.error("Ocurrió un error al procesar la grabación.")
-            st.caption(f"Detalle técnico: {error}")
+            st.session_state["mensaje_reconocimiento"] = "error"
+            st.error(f"Detalle técnico: {error}")
+
+if st.session_state["mensaje_reconocimiento"] == "ok":
+    st.success("¡Tu voz se convirtió en texto!")
+
+elif st.session_state["mensaje_reconocimiento"] == "no_entendido":
+    st.warning(
+        "No logramos entender lo que dijiste. "
+        "Intenta grabar de nuevo, hablando con claridad."
+    )
+
+elif st.session_state["mensaje_reconocimiento"] == "sin_conexion":
+    st.error(
+        "No se pudo conectar con el servicio de reconocimiento. "
+        "Comprueba tu conexión a internet e inténtalo de nuevo."
+    )
 
 # ==================================================
-# TEXTO RECONOCIDO O ESCRITO
+# REVISIÓN DEL TEXTO
 # ==================================================
 
 st.markdown("---")
 st.subheader("📝 2. Revisa tu texto")
-
-if "texto_reconocido" not in st.session_state:
-    st.session_state["texto_reconocido"] = ""
 
 texto = st.text_area(
     "Texto que quieres traducir:",
@@ -237,21 +256,10 @@ texto = st.text_area(
     placeholder="Graba tu voz o escribe aquí..."
 )
 
-# Copia el reconocimiento al cuadro de texto cuando se obtiene.
-if (
-    st.session_state["texto_reconocido"]
-    and not st.session_state.get("texto_ya_copiado", False)
-):
-    st.session_state["texto_entrada"] = (
-        st.session_state["texto_reconocido"]
-    )
-    st.session_state["texto_ya_copiado"] = True
-    st.rerun()
-
 if st.button("🧹 Limpiar texto"):
     st.session_state["texto_entrada"] = ""
     st.session_state["texto_reconocido"] = ""
-    st.session_state["texto_ya_copiado"] = False
+    st.session_state["mensaje_reconocimiento"] = ""
     st.rerun()
 
 # ==================================================
@@ -279,15 +287,19 @@ idioma_destino = st.selectbox(
 st.markdown("---")
 
 if st.button("✨ Traducir y generar audio"):
-    if not texto.strip():
+
+    texto_a_traducir = st.session_state["texto_entrada"].strip()
+
+    if not texto_a_traducir:
         st.warning("Primero graba tu voz o escribe un texto.")
+
     else:
         try:
             with st.spinner("Traduciendo tu texto..."):
                 traductor = Translator()
 
                 traduccion = traductor.translate(
-                    texto.strip(),
+                    texto_a_traducir,
                     src=IDIOMAS[idioma_origen]["codigo"],
                     dest=IDIOMAS[idioma_destino]["codigo"]
                 )
@@ -306,6 +318,7 @@ if st.button("✨ Traducir y generar audio"):
                 voz.save(ruta_audio)
 
             st.success("¡Tu traducción está lista!")
+
             st.subheader("💬 Resultado de la traducción")
             st.write(texto_traducido)
 
@@ -342,9 +355,11 @@ if st.button("✨ Traducir y generar audio"):
 # ==================================================
 
 st.markdown("---")
+
 st.markdown("""
 <div style="text-align:center; padding:15px; color:#8C451D;">
     <strong>VozTexto 🌎</strong>
     <p>La tecnología nos acerca, sin importar el idioma.</p>
 </div>
 """, unsafe_allow_html=True)
+
