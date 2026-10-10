@@ -1,194 +1,438 @@
+
 import os
 import streamlit as st
-from bokeh.models.widgets import Button
-#from bokeh.io import show
-#from bokeh.models import Button
-from bokeh.models import CustomJS
-from streamlit_bokeh_events import streamlit_bokeh_events
-from PIL import Image
-import time
-import glob
-
-
-
-from gtts import gTTS
 from googletrans import Translator
+from gtts import gTTS
+from bokeh.models import Button, CustomJS
+from streamlit_bokeh_events import streamlit_bokeh_events
 
+# ==================================================
+# CONFIGURACIÓN
+# ==================================================
 
-st.title("TRADUCTOR.")
-st.subheader("Escucho lo que quieres traducir.")
+st.set_page_config(
+    page_title="VozTexto | Traductor",
+    page_icon="🌎",
+    layout="centered"
+)
 
+# ==================================================
+# ESTILOS
+# ==================================================
 
-image = Image.open('OIG7.jpg')
+st.markdown("""
+<style>
+    .stApp {
+        background-color: #FFF8F0;
+    }
 
-st.image(image,width=300)
+    .block-container {
+        max-width: 950px;
+        padding-top: 2rem;
+        padding-bottom: 3rem;
+    }
+
+    h1, h2, h3 {
+        color: #8C451D;
+    }
+
+    .hero {
+        background: linear-gradient(135deg, #FFAD70, #F07836);
+        padding: 30px 20px;
+        border-radius: 22px;
+        text-align: center;
+        margin-bottom: 20px;
+        box-shadow: 0 5px 18px rgba(140, 69, 29, 0.12);
+    }
+
+    .hero h1 {
+        color: white;
+        font-size: 42px;
+        margin: 0;
+    }
+
+    .hero p {
+        color: white;
+        font-size: 17px;
+        margin: 8px 0 0 0;
+    }
+
+    .description {
+        text-align: center;
+        color: #76533D;
+        font-size: 17px;
+        margin-bottom: 25px;
+    }
+
+    .section-card {
+        background: white;
+        border: 1px solid #F0D8C5;
+        padding: 20px;
+        border-radius: 18px;
+        margin: 12px 0;
+    }
+
+    div.stButton > button {
+        background: #F07836;
+        color: white;
+        border: none;
+        border-radius: 12px;
+        min-height: 46px;
+        font-weight: 600;
+        width: 100%;
+    }
+
+    div.stButton > button:hover {
+        background: #D95D23;
+        color: white;
+        border: none;
+    }
+
+    [data-testid="stSidebar"] {
+        background-color: #FFF0E2;
+    }
+
+    footer {
+        visibility: hidden;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# ==================================================
+# IDIOMAS DISPONIBLES
+# ==================================================
+
+IDIOMAS = {
+    "Español": {
+        "codigo": "es",
+        "voz": "es-ES"
+    },
+    "Inglés": {
+        "codigo": "en",
+        "voz": "en-US"
+    },
+    "Francés": {
+        "codigo": "fr",
+        "voz": "fr-FR"
+    },
+    "Portugués": {
+        "codigo": "pt",
+        "voz": "pt-PT"
+    },
+    "Italiano": {
+        "codigo": "it",
+        "voz": "it-IT"
+    },
+    "Alemán": {
+        "codigo": "de",
+        "voz": "de-DE"
+    },
+    "Coreano": {
+        "codigo": "ko",
+        "voz": "ko-KR"
+    },
+    "Mandarín": {
+        "codigo": "zh-cn",
+        "voz": "zh-CN"
+    },
+    "Japonés": {
+        "codigo": "ja",
+        "voz": "ja-JP"
+    },
+    "Bengalí": {
+        "codigo": "bn",
+        "voz": "bn-IN"
+    },
+    "Árabe": {
+        "codigo": "ar",
+        "voz": "ar-SA"
+    },
+    "Hindi": {
+        "codigo": "hi",
+        "voz": "hi-IN"
+    }
+}
+
+# ==================================================
+# BARRA LATERAL
+# ==================================================
+
 with st.sidebar:
-    st.subheader("Traductor.")
-    st.write("Presiona el botón, cuando escuches la señal "
-                 "habla lo que quieres traducir, luego selecciona"   
-                 " la configuración de lenguaje que necesites.")
+    st.title("🌎 VozTexto")
+    st.write("Tu voz conecta idiomas y culturas.")
+    st.markdown("---")
+    st.subheader("¿Cómo funciona?")
+    st.write("1. Selecciona el idioma que vas a hablar.")
+    st.write("2. Pulsa el botón del micrófono.")
+    st.write("3. Revisa el texto reconocido.")
+    st.write("4. Selecciona el idioma de destino.")
+    st.write("5. Traduce y escucha el resultado.")
+    st.markdown("---")
+    st.caption("Proyecto de procesamiento de lenguaje natural.")
 
+# ==================================================
+# ENCABEZADO E IMÁGENES
+# ==================================================
 
-st.write("Toca el Botón y habla lo que quires traducir")
+st.markdown("""
+<div class="hero">
+    <h1>🌎 VozTexto</h1>
+    <p>Habla. Traduce. Conecta.</p>
+</div>
 
-stt_button = Button(label=" Escuchar  🎤", width=300,  height=50)
+<div class="description">
+    Rompe las barreras del idioma usando tu voz.
+</div>
+""", unsafe_allow_html=True)
 
-stt_button.js_on_event("button_click", CustomJS(code="""
-    var recognition = new webkitSpeechRecognition();
-    recognition.continuous = false;  // Cambia a false
-    recognition.interimResults = true;
-    recognition.lang = 'es-ES';  // Puedes ajustar el idioma
- 
-    recognition.onresult = function (e) {
-        var value = "";
-        for (var i = e.resultIndex; i < e.results.length; ++i) {
-            if (e.results[i].isFinal) {
-                value += e.results[i][0].transcript;
-            }
-        }
-        if ( value != "") {
-            document.dispatchEvent(new CustomEvent("GET_TEXT", {detail: value}));
-        }
-    }
-    
-    recognition.onend = function() {
-        console.log("Reconocimiento detenido");
-    }
-    
-    recognition.start();
-"""))
+# Las imágenes deben estar en la raíz del repositorio.
 
-result = streamlit_bokeh_events(
+col_img1, col_img2 = st.columns(2)
+
+with col_img1:
+    if os.path.exists("Imagen1.jpg"):
+        st.image(
+            "Imagen1.jpg",
+            use_container_width=True
+        )
+    else:
+        st.info("Agrega Imagen1.jpg al repositorio.")
+
+with col_img2:
+    if os.path.exists("Imagen2.jpg"):
+        st.image(
+            "Imagen2.jpg",
+            use_container_width=True
+        )
+    else:
+        st.info("Agrega Imagen2.jpg al repositorio.")
+
+st.markdown("---")
+
+# ==================================================
+# SELECCIÓN DEL IDIOMA DE ORIGEN
+# ==================================================
+
+st.subheader("🎤 1. Habla para comenzar")
+
+idioma_origen = st.selectbox(
+    "¿En qué idioma vas a hablar?",
+    list(IDIOMAS.keys()),
+    index=0,
+    key="idioma_origen"
+)
+
+st.caption(
+    "Permite el acceso al micrófono cuando tu navegador lo solicite."
+)
+
+codigo_voz = IDIOMAS[idioma_origen]["voz"]
+
+# ==================================================
+# RECONOCIMIENTO DE VOZ
+# ==================================================
+
+stt_button = Button(
+    label="🎤 Escuchar mi voz",
+    width=300,
+    height=55
+)
+
+stt_button.js_on_event(
+    "button_click",
+    CustomJS(code=f"""
+        const SpeechRecognition =
+            window.SpeechRecognition ||
+            window.webkitSpeechRecognition;
+
+        if (!SpeechRecognition) {{
+            document.dispatchEvent(
+                new CustomEvent("GET_TEXT", {{
+                    detail: "ERROR_BROWSER"
+                }})
+            );
+        }} else {{
+            const recognition = new SpeechRecognition();
+
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = "{codigo_voz}";
+
+            recognition.onresult = function(event) {{
+                const texto =
+                    event.results[0][0].transcript;
+
+                document.dispatchEvent(
+                    new CustomEvent("GET_TEXT", {{
+                        detail: texto
+                    }})
+                );
+            }};
+
+            recognition.onerror = function(event) {{
+                document.dispatchEvent(
+                    new CustomEvent("GET_TEXT", {{
+                        detail: "ERROR:" + event.error
+                    }})
+                );
+            }};
+
+            recognition.start();
+        }}
+    """)
+)
+
+resultado_microfono = streamlit_bokeh_events(
     stt_button,
     events="GET_TEXT",
-    key="listen",
+    key="reconocimiento_voz",
     refresh_on_update=False,
     override_height=75,
-    debounce_time=0)
+    debounce_time=0
+)
 
-if result:
-    if "GET_TEXT" in result:
-        st.write(result.get("GET_TEXT"))
-    try:
-        os.mkdir("temp")
-    except:
-        pass
-    st.title("Texto a Audio")
-    translator = Translator()
-    
-    text = str(result.get("GET_TEXT"))
-    in_lang = st.selectbox(
-        "Selecciona el lenguaje de Entrada",
-        ("Inglés", "Español", "Bengali", "Coreano", "Mandarín", "Japonés"),
-    )
-    if in_lang == "Inglés":
-        input_language = "en"
-    elif in_lang == "Español":
-        input_language = "es"
-    elif in_lang == "Bengali":
-        input_language = "bn"
-    elif in_lang == "Coreano":
-        input_language = "ko"
-    elif in_lang == "Mandarín":
-        input_language = "zh-cn"
-    elif in_lang == "Japonés":
-        input_language = "ja"
-    
-    out_lang = st.selectbox(
-        "Selecciona el lenguaje de salida",
-        ("Inglés", "Español", "Bengali", "Coreano", "Mandarín", "Japonés"),
-    )
-    if out_lang == "Inglés":
-        output_language = "en"
-    elif out_lang == "Español":
-        output_language = "es"
-    elif out_lang == "Bengali":
-        output_language = "bn"
-    elif out_lang == "Coreano":
-        output_language = "ko"
-    elif out_lang == "Mandarín":
-        output_language = "zh-cn"
-    elif out_lang == "Japonés":
-        output_language = "ja"
-    
-    english_accent = st.selectbox(
-        "Selecciona el acento",
-        (
-            "Defecto",
-            "Español",
-            "Reino Unido",
-            "Estados Unidos",
-            "Canada",
-            "Australia",
-            "Irlanda",
-            "Sudáfrica",
-        ),
-    )
-    
-    if english_accent == "Defecto":
-        tld = "com"
-    elif english_accent == "Español":
-        tld = "com.mx"
-    
-    elif english_accent == "Reino Unido":
-        tld = "co.uk"
-    elif english_accent == "Estados Unidos":
-        tld = "com"
-    elif english_accent == "Canada":
-        tld = "ca"
-    elif english_accent == "Australia":
-        tld = "com.au"
-    elif english_accent == "Irlanda":
-        tld = "ie"
-    elif english_accent == "Sudáfrica":
-        tld = "co.za"
-    
-    
-    def text_to_speech(input_language, output_language, text, tld):
-        translation = translator.translate(text, src=input_language, dest=output_language)
-        trans_text = translation.text
-        tts = gTTS(trans_text, lang=output_language, tld=tld, slow=False)
+if resultado_microfono and "GET_TEXT" in resultado_microfono:
+    resultado = resultado_microfono["GET_TEXT"]
+
+    if resultado == "ERROR_BROWSER":
+        st.error(
+            "Tu navegador no admite reconocimiento de voz. "
+            "Prueba con Google Chrome."
+        )
+    elif resultado.startswith("ERROR:"):
+        st.error(
+            "No se pudo reconocer la voz. Revisa los permisos "
+            "del micrófono e inténtalo de nuevo."
+        )
+    else:
+        st.session_state["texto_reconocido"] = resultado
+
+# ==================================================
+# TEXTO RECONOCIDO O ESCRITO
+# ==================================================
+
+st.markdown("---")
+st.subheader("📝 2. Revisa tu texto")
+
+if "texto_reconocido" not in st.session_state:
+    st.session_state["texto_reconocido"] = ""
+
+texto = st.text_area(
+    "El texto que quieres traducir:",
+    key="texto_entrada",
+    value=st.session_state["texto_reconocido"],
+    height=130,
+    placeholder="Habla con el micrófono o escribe aquí..."
+)
+
+# ==================================================
+# SELECCIÓN DEL IDIOMA DE DESTINO
+# ==================================================
+
+st.subheader("🌐 3. Elige el idioma de traducción")
+
+idiomas_destino = [
+    idioma for idioma in IDIOMAS
+    if idioma != idioma_origen
+]
+
+idioma_destino = st.selectbox(
+    "¿A qué idioma quieres traducir?",
+    idiomas_destino,
+    index=0,
+    key="idioma_destino"
+)
+
+# ==================================================
+# TRADUCCIÓN Y GENERACIÓN DE AUDIO
+# ==================================================
+
+st.markdown("---")
+
+if st.button("✨ Traducir y generar audio"):
+
+    if not texto.strip():
+        st.warning(
+            "Primero habla con el micrófono o escribe un texto."
+        )
+
+    else:
         try:
-            my_file_name = text[0:20]
-        except:
-            my_file_name = "audio"
-        tts.save(f"temp/{my_file_name}.mp3")
-        return my_file_name, trans_text
-    
-    
-    display_output_text = st.checkbox("Mostrar el texto")
-    
-    if st.button("convertir"):
-        result, output_text = text_to_speech(input_language, output_language, text, tld)
-        audio_file = open(f"temp/{result}.mp3", "rb")
-        audio_bytes = audio_file.read()
-        st.markdown(f"## Tú audio:")
-        st.audio(audio_bytes, format="audio/mp3", start_time=0)
-    
-        if display_output_text:
-            st.markdown(f"## Texto de salida:")
-            st.write(f" {output_text}")
-    
-    
-    def remove_files(n):
-        mp3_files = glob.glob("temp/*mp3")
-        if len(mp3_files) != 0:
-            now = time.time()
-            n_days = n * 86400
-            for f in mp3_files:
-                if os.stat(f).st_mtime < now - n_days:
-                    os.remove(f)
-                    print("Deleted ", f)
+            with st.spinner("Traduciendo tu texto..."):
 
-    remove_files(7)
-           
+                traductor = Translator()
 
+                traduccion = traductor.translate(
+                    texto.strip(),
+                    src=IDIOMAS[idioma_origen]["codigo"],
+                    dest=IDIOMAS[idioma_destino]["codigo"]
+                )
 
-        
-    
+                texto_traducido = traduccion.text
 
+                os.makedirs("temp", exist_ok=True)
 
+                ruta_audio = "temp/traduccion.mp3"
 
-        
-    
+                audio = gTTS(
+                    text=texto_traducido,
+                    lang=IDIOMAS[idioma_destino]["codigo"],
+                    slow=False
+                )
 
+                audio.save(ruta_audio)
+
+            st.success("¡Tu traducción está lista!")
+
+            st.markdown(
+                '<div class="section-card">'
+                '<h3>💬 Resultado de la traducción</h3>'
+                '</div>',
+                unsafe_allow_html=True
+            )
+
+            st.write(texto_traducido)
+
+            st.subheader("🔊 Escucha tu traducción")
+
+            with open(ruta_audio, "rb") as archivo:
+                audio_bytes = archivo.read()
+
+            st.audio(
+                audio_bytes,
+                format="audio/mp3"
+            )
+
+            st.download_button(
+                label="⬇️ Descargar audio MP3",
+                data=audio_bytes,
+                file_name="voztexto_traduccion.mp3",
+                mime="audio/mpeg"
+            )
+
+            st.download_button(
+                label="📄 Descargar texto traducido",
+                data=texto_traducido,
+                file_name="traduccion.txt",
+                mime="text/plain"
+            )
+
+        except Exception as error:
+            st.error(
+                "No se pudo completar la traducción. "
+                "Comprueba tu conexión a internet e inténtalo otra vez."
+            )
+            st.caption(f"Detalle técnico: {error}")
+
+# ==================================================
+# PIE DE PÁGINA
+# ==================================================
+
+st.markdown("---")
+
+st.markdown("""
+<div style="text-align:center; padding:15px; color:#8C451D;">
+    <strong>VozTexto 🌎</strong>
+    <p>La tecnología nos acerca, sin importar el idioma.</p>
+</div>
+""", unsafe_allow_html=True)
