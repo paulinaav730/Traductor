@@ -1,6 +1,7 @@
 
 import os
 import io
+import asyncio
 import streamlit as st
 import speech_recognition as sr
 from googletrans import Translator
@@ -22,70 +23,69 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    .stApp {
-        background-color: #FFF8F0;
-    }
+.stApp {
+    background-color: #FFF8F0;
+}
 
-    .block-container {
-        max-width: 950px;
-        padding-top: 2rem;
-        padding-bottom: 3rem;
-    }
+.block-container {
+    max-width: 950px;
+    padding-top: 2rem;
+    padding-bottom: 3rem;
+}
 
-    h1, h2, h3 {
-        color: #8C451D;
-    }
+h1, h2, h3 {
+    color: #8C451D;
+}
 
-    .hero {
-        background: linear-gradient(135deg, #FFAD70, #F07836);
-        padding: 30px 20px;
-        border-radius: 22px;
-        text-align: center;
-        margin-bottom: 20px;
-    }
+.hero {
+    background: linear-gradient(135deg, #FFAD70, #F07836);
+    padding: 30px 20px;
+    border-radius: 22px;
+    text-align: center;
+    margin-bottom: 20px;
+}
 
-    .hero h1 {
-        color: white;
-        font-size: 42px;
-        margin: 0;
-    }
+.hero h1 {
+    color: white;
+    font-size: 42px;
+    margin: 0;
+}
 
-    .hero p {
-        color: white;
-        font-size: 17px;
-        margin: 8px 0 0 0;
-    }
+.hero p {
+    color: white;
+    font-size: 17px;
+    margin: 8px 0 0 0;
+}
 
-    .description {
-        text-align: center;
-        color: #76533D;
-        font-size: 17px;
-        margin-bottom: 25px;
-    }
+.description {
+    text-align: center;
+    color: #76533D;
+    font-size: 17px;
+    margin-bottom: 25px;
+}
 
-    div.stButton > button {
-        background: #F07836;
-        color: white;
-        border: none;
-        border-radius: 12px;
-        min-height: 46px;
-        font-weight: 600;
-        width: 100%;
-    }
+div.stButton > button {
+    background: #F07836;
+    color: white;
+    border: none;
+    border-radius: 12px;
+    min-height: 46px;
+    font-weight: 600;
+    width: 100%;
+}
 
-    div.stButton > button:hover {
-        background: #D95D23;
-        color: white;
-        border: none;
-    }
+div.stButton > button:hover {
+    background: #D95D23;
+    color: white;
+}
 
-    [data-testid="stSidebar"] {
-        background-color: #FFF0E2;
-    }
+[data-testid="stSidebar"] {
+    background-color: #FFF0E2;
+}
 
-    footer {
-        visibility: hidden;
-    }
+footer {
+    visibility: hidden;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -109,7 +109,42 @@ IDIOMAS = {
 }
 
 # ==================================================
-# ESTADO DE LA APLICACIÓN
+# FUNCIONES
+# ==================================================
+
+def traducir_texto(texto, idioma_origen, idioma_destino):
+    """Ejecuta la traducción asíncrona de googletrans."""
+    async def ejecutar():
+        async with Translator() as traductor:
+            resultado = await traductor.translate(
+                texto,
+                src=IDIOMAS[idioma_origen]["codigo"],
+                dest=IDIOMAS[idioma_destino]["codigo"]
+            )
+            return resultado.text
+
+    return asyncio.run(ejecutar())
+
+
+def generar_audio(texto, idioma):
+    """Genera el audio de la traducción."""
+    os.makedirs("temp", exist_ok=True)
+    ruta = "temp/traduccion.mp3"
+
+    voz = gTTS(
+        text=texto,
+        lang=IDIOMAS[idioma]["codigo"],
+        slow=False
+    )
+
+    voz.save(ruta)
+
+    with open(ruta, "rb") as archivo:
+        return archivo.read()
+
+
+# ==================================================
+# ESTADO
 # ==================================================
 
 if "texto_reconocido" not in st.session_state:
@@ -147,7 +182,6 @@ st.markdown("""
     <h1>🌎 VozTexto</h1>
     <p>Habla. Traduce. Conecta.</p>
 </div>
-
 <div class="description">
     Rompe las barreras del idioma usando tu voz.
 </div>
@@ -166,7 +200,7 @@ with col_img2:
 st.markdown("---")
 
 # ==================================================
-# GRABACIÓN Y RECONOCIMIENTO DE VOZ
+# GRABACIÓN DE VOZ
 # ==================================================
 
 st.subheader("🎤 1. Graba tu voz")
@@ -179,8 +213,8 @@ idioma_origen = st.selectbox(
 )
 
 st.info(
-    "Pulsa el grabador, permite el acceso al micrófono si el navegador "
-    "lo solicita, habla y detén la grabación."
+    "Graba tu mensaje y después pulsa "
+    "'Convertir voz a texto'."
 )
 
 grabacion = st.audio_input(
@@ -196,7 +230,7 @@ if grabacion is not None:
         try:
             reconocedor = sr.Recognizer()
 
-            with st.spinner("Convirtiendo tu voz en texto..."):
+            with st.spinner("Reconociendo tu voz..."):
                 datos_audio = sr.AudioFile(
                     io.BytesIO(grabacion.getvalue())
                 )
@@ -209,41 +243,33 @@ if grabacion is not None:
                     language=IDIOMAS[idioma_origen]["voz"]
                 )
 
-            # Actualizar el estado ANTES de crear el cuadro de texto.
             st.session_state["texto_reconocido"] = texto_reconocido
             st.session_state["texto_entrada"] = texto_reconocido
             st.session_state["mensaje_reconocimiento"] = "ok"
 
-            # Actualizar la interfaz con el texto reconocido.
             st.rerun()
 
         except sr.UnknownValueError:
-            st.session_state["mensaje_reconocimiento"] = "no_entendido"
+            st.warning(
+                "No logramos entender la grabación. "
+                "Intenta hablar más despacio."
+            )
 
         except sr.RequestError:
-            st.session_state["mensaje_reconocimiento"] = "sin_conexion"
+            st.error(
+                "No se pudo conectar al servicio de reconocimiento. "
+                "Comprueba tu conexión a internet."
+            )
 
         except Exception as error:
-            st.session_state["mensaje_reconocimiento"] = "error"
-            st.error(f"Detalle técnico: {error}")
+            st.error("No se pudo procesar la grabación.")
+            st.caption(f"Detalle técnico: {error}")
 
 if st.session_state["mensaje_reconocimiento"] == "ok":
     st.success("¡Tu voz se convirtió en texto!")
 
-elif st.session_state["mensaje_reconocimiento"] == "no_entendido":
-    st.warning(
-        "No logramos entender lo que dijiste. "
-        "Intenta grabar de nuevo, hablando con claridad."
-    )
-
-elif st.session_state["mensaje_reconocimiento"] == "sin_conexion":
-    st.error(
-        "No se pudo conectar con el servicio de reconocimiento. "
-        "Comprueba tu conexión a internet e inténtalo de nuevo."
-    )
-
 # ==================================================
-# REVISIÓN DEL TEXTO
+# REVISAR TEXTO
 # ==================================================
 
 st.markdown("---")
@@ -263,7 +289,7 @@ if st.button("🧹 Limpiar texto"):
     st.rerun()
 
 # ==================================================
-# IDIOMA DE DESTINO
+# IDIOMA DESTINO
 # ==================================================
 
 st.subheader("🌐 3. Elige el idioma de traducción")
@@ -281,13 +307,12 @@ idioma_destino = st.selectbox(
 )
 
 # ==================================================
-# TRADUCCIÓN Y GENERACIÓN DE AUDIO
+# TRADUCCIÓN Y AUDIO
 # ==================================================
 
 st.markdown("---")
 
 if st.button("✨ Traducir y generar audio"):
-
     texto_a_traducir = st.session_state["texto_entrada"].strip()
 
     if not texto_a_traducir:
@@ -296,26 +321,16 @@ if st.button("✨ Traducir y generar audio"):
     else:
         try:
             with st.spinner("Traduciendo tu texto..."):
-                traductor = Translator()
-
-                traduccion = traductor.translate(
+                texto_traducido = traducir_texto(
                     texto_a_traducir,
-                    src=IDIOMAS[idioma_origen]["codigo"],
-                    dest=IDIOMAS[idioma_destino]["codigo"]
+                    idioma_origen,
+                    idioma_destino
                 )
 
-                texto_traducido = traduccion.text
-
-                os.makedirs("temp", exist_ok=True)
-                ruta_audio = "temp/traduccion.mp3"
-
-                voz = gTTS(
-                    text=texto_traducido,
-                    lang=IDIOMAS[idioma_destino]["codigo"],
-                    slow=False
+                audio_bytes = generar_audio(
+                    texto_traducido,
+                    idioma_destino
                 )
-
-                voz.save(ruta_audio)
 
             st.success("¡Tu traducción está lista!")
 
@@ -323,10 +338,6 @@ if st.button("✨ Traducir y generar audio"):
             st.write(texto_traducido)
 
             st.subheader("🔊 Escucha tu traducción")
-
-            with open(ruta_audio, "rb") as archivo:
-                audio_bytes = archivo.read()
-
             st.audio(audio_bytes, format="audio/mp3")
 
             st.download_button(
@@ -346,7 +357,7 @@ if st.button("✨ Traducir y generar audio"):
         except Exception as error:
             st.error(
                 "No se pudo completar la traducción. "
-                "Comprueba tu conexión a internet e inténtalo de nuevo."
+                "Comprueba tu conexión e inténtalo de nuevo."
             )
             st.caption(f"Detalle técnico: {error}")
 
@@ -362,4 +373,5 @@ st.markdown("""
     <p>La tecnología nos acerca, sin importar el idioma.</p>
 </div>
 """, unsafe_allow_html=True)
+
 
